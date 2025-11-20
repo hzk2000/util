@@ -34,7 +34,7 @@
 import h5py
 import numpy as np
 from numpy.fft import rfft, rfftfreq
-from lmfit.models import LorentzianModel, ExponentialModel, LinearModel
+from lmfit.models import LorentzianModel, ExponentialModel, LinearModel, PolynomialModel
 
 # --- 1. 模型优化: 使用内置高性能模型，避免字符串解析 ---
 # 组合模型比手写字符串快且稳定
