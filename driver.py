@@ -280,9 +280,7 @@ def ramp_X_new(B0, Mag, rate=0.0002, xi=0, phi=0, psi=0, step=0, Max_B=[0.5,0.5,
 
         tm.sleep(sleep_time + 1)  
 
-        curr_Bx = Bx_target
-        curr_By = By_target
-        curr_Bz = Bz_target
+        curr_Bx, curr_By, curr_Bz = Bx_target, By_target, Bz_target
 
 def call_mag_new():
     import subprocess
