@@ -52,42 +52,6 @@ def demodulate(signal, freq, window, t0, phase, window_type="uniform"):
         raise ValueError("Invalid window_type. Choose 'gaussian' or 'uniform'.")
 
 
-# def readfile(file, **kwargs):
-#     if kwargs['demod_type']=="full":
-#         signal = qcs.load(file).get_trace().values.ravel()
-#         window = signal.shape[0]
-#     elif kwargs['demod_type']=="partial":
-#         signal = qcs.load(file).get_trace().values.ravel()[int(kwargs['st'] * kwargs['sample_rate']):int(kwargs['ed'] * kwargs['sample_rate'])]
-#         window = int( kwargs['sample_rate'] * kwargs['demod_len'] )
-#     else:
-#         raise ValueError("Invalid demod type. Choose 'full' or 'partial'.")
-#     return demodulate(signal, kwargs['demod_freq'], window, kwargs['st'] + kwargs['pre_delay'], kwargs['demod_phase'], kwargs['window_type'])
-
-# def calu_data(file,params_list):
-#     with h5py.File(params_list[0]["tmp_file_path"], "w") as h5f:
-#         tset = None
-#         dset = None
-#         with parallel_backend('loky', inner_max_num_threads=1):
-#             for i, demod in enumerate(Parallel(n_jobs=-1)(delayed(readfile)(f,**params_list[index]) for index,f in enumerate(file) )):
-#                 if dset is None:
-#                     tset = h5f.create_dataset("time", (1, *demod[0].shape), maxshape=(None, *demod[0].shape), dtype=np.complex128)
-#                     dset = h5f.create_dataset("demod2", (1, *demod[1].shape), maxshape=(None, *demod[1].shape), dtype=np.complex128)
-#                     time=demod[0]
-#                 else:
-#                     # tset.resize(tset.shape[0] + 1, axis=0)
-#                     dset.resize(dset.shape[0] + 1, axis=0)
-#                     # tset[-1] = demod[0]  
-#                     dset[-1] = demod[1]  
-#     save_parameters(params_list[0]["tmp_file_path"],params_list[0])
-#     return time
-
-# def get_data(params_list):
-#     with h5py.File(params_list[0]["tmp_file_path"], "r") as h5f:
-#         print("Datasets in file:", list(h5f.keys()))
-#         time_data = h5f["time"][:]  
-#         demod2_data = h5f["demod2"][:]  
-#     return time_data, demod2_data
-
 
 
 def readfile(file, **kwargs):
