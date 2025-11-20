@@ -4,79 +4,9 @@ try:
 except:
     print("No Keysight package")
     pass
-import time
 import os
 import h5py
 import json
-
-
-# def set_mapper(paras):
-#     awg_addresses = [
-#         qcs.Address(chassis=1, slot=2, channel=2),
-#         qcs.Address(chassis=1, slot=2, channel=3)
-#     ]
-#     slow_awg_addresses = [
-#         qcs.Address(chassis=1, slot=13, channel=1),
-#         qcs.Address(chassis=1, slot=13, channel=2)
-#     ]
-#     digitizer_addresses = [
-#         qcs.Address(chassis=1, slot=7, channel=1),
-#         qcs.Address(chassis=1, slot=7, channel=4)
-#     ]
-#     downconverter_addresses = [
-#         qcs.Address(chassis=1, slot=6, channel=1),
-#         qcs.Address(chassis=1, slot=6, channel=4)
-#     ]
-
-#     qubit_awg   = qcs.Channels(range(1), "qubit_awg", absolute_phase=True)
-#     readout_awg = qcs.Channels(range(1), "readout_awg", absolute_phase=True)
-#     marker_awg  = qcs.Channels(range(1), "marker_awg", absolute_phase=True)
-#     osc_trigger = qcs.Channels(range(1), "osc_trigger", absolute_phase=True)
-#     dig         = qcs.Channels(range(1), "dig", absolute_phase=True)
-
-#     mapper = qcs.ChannelMapper()
-#     mapper.add_channel_mapping(qubit_awg, awg_addresses[0], qcs.InstrumentEnum.M5300AWG)
-#     mapper.add_channel_mapping(readout_awg, awg_addresses[1], qcs.InstrumentEnum.M5300AWG)
-#     mapper.add_channel_mapping(marker_awg, slow_awg_addresses[0], qcs.InstrumentEnum.M5301AWG)
-#     mapper.add_channel_mapping(osc_trigger, slow_awg_addresses[1], qcs.InstrumentEnum.M5301AWG)
-#     mapper.add_channel_mapping(dig, digitizer_addresses[0], qcs.InstrumentEnum.M5200Digitizer)
-#     mapper.add_downconverters(digitizer_addresses[0], downconverter_addresses[0])
-#     mapper.add_downconverters(digitizer_addresses[1], downconverter_addresses[1])
-#     mapper.set_lo_frequencies(
-#         lo_frequency=paras["Res_freq"] - 100e6,
-#         addresses=[awg_addresses[1], downconverter_addresses[0], downconverter_addresses[1]]
-#     )
-#     mapper.set_lo_frequencies(
-#         lo_frequency=7e9,
-#         addresses=[awg_addresses[0]]
-#     )
-#     return mapper,qubit_awg,readout_awg,marker_awg,osc_trigger,dig
-
-# def wurst_waveform(tau, bw, N, phase_skew):
-#     """"
-#     Creates envelope for WURST pulse
-#     :tau: duration of pulse
-#     :n_steps: number of items in array
-#     :bw: bandwidth
-#     :f0: central frequency
-#     :N: controls "squareness" of amplitude shape 
-#     :phase_skew: phase added to orthogonal quadrature
-#     """
-#     sample_rate=4.8e9
-#     times = np.linspace(0,tau,int(tau*sample_rate) )
-#     # times = np.linspace(0,tau,n_steps )
-#     # amplitude = np.array([1-np.abs(np.cos(np.pi*(t-(tau/2)/tau))**N for t in times])
-#     amplitude = np.array([1-np.abs(np.cos(np.pi*t/tau))**N for t in times])
-#     phi = np.array([(-bw/2)*t + (bw/(2*tau))*(t**2)- np.pi/2 for t in times])
-#     # frequency = np.array([-bw/2 + (bw/tau)*t for t in times])
-
-#     I = amplitude*np.sin(phi)
-#     Q = amplitude*np.cos(phi + phase_skew)
-#     # I = amplitude*np.cos(2*np.pi*frequency*times)
-#     # Q = amplitude*np.sin(2*np.pi*frequency*times+phase_skew)
-#     signal = I+Q*1j
-
-#     return [times, signal]
 
 def wurst_waveform(tau, bw, N, phase_skew):
     """"
@@ -97,50 +27,6 @@ def wurst_waveform(tau, bw, N, phase_skew):
 
     return [times, signal]
 
-# def wideband_noise(duration, bw=2e6, amplitude=1.0, sample_rate=4.8e9):
-#     """
-#     Generate wideband noise between 0–bw (Hz).
-    
-#     Parameters
-#     ----------
-#     duration : float
-#         Duration of the noise signal in seconds.
-#     sample_rate : float, optional
-#         Sampling rate in Hz (default = 4.8 GHz).
-#     bw : float, optional
-#         Bandwidth of the noise (default = 2 MHz).
-#     amplitude : float, optional
-#         Amplitude scaling factor for noise.
-    
-#     Returns
-#     -------
-#     times : ndarray
-#         Time array.
-#     noise_signal : ndarray (complex)
-#         Complex-valued band-limited noise signal.
-#     """
-#     n_samples = int(duration * sample_rate)
-#     times = np.linspace(0, duration, n_samples, endpoint=False)
-    
-#     # Generate white noise in frequency domain
-#     freqs = np.fft.fftfreq(n_samples, 1/sample_rate)
-#     spectrum = np.zeros(n_samples, dtype=complex)
-    
-#     # Select band [0, bw]
-#     mask = (freqs >= 0) & (freqs <= bw)
-#     spectrum[mask] = (np.random.randn(np.sum(mask)) +
-#                       1j*np.random.randn(np.sum(mask)))
-    
-#     # Mirror negative frequencies for a real-valued time-domain signal
-#     spectrum[mask[::-1]] = np.conj(spectrum[mask])
-    
-#     # Convert back to time domain
-#     noise_signal = np.fft.ifft(spectrum)
-    
-#     # Scale amplitude
-#     noise_signal *= amplitude / np.max(np.abs(noise_signal))
-    
-#     return times, noise_signal
 def wideband_noise(duration, bw=2e6, noise_amp=1.0, offset=0.0, sample_rate=4.8e9):
     """
     Generate wideband noise between 0–bw (Hz) with separate tunable noise amplitude and DC offset.
@@ -308,7 +194,33 @@ def add_pulses_to_program(program, pulse_params_list):
             #                         amplitude=amplitude, rf_frequency=frequency,
             #                         instantaneous_phase=phase)
             #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+            
+            # elif params[1] == "bir4":
+            #     envelope_type = params[1]
+            #     duration      = params[2]
+            #     amplitude     = params[3]
+            #     frequency     = params[4]
+            #     phase         = params[5]
+            #     awg_channel   = params[6]
+            #     pre_delay     = params[7]
+            #     df_hz         = params[8]     # 半扫频宽（Hz）
+            #     beta          = params[9]
+            #     n_sech        = params[10]
+            #     # 两次相位跳变，缺省为 π 旋转设置
+            #     dphi1 = params[11] if len(params) > 11 else 1.5*np.pi
+            #     dphi2 = params[12] if len(params) > 12 else -0.5*np.pi
+
+            #     time, envelope = zip(bir4_waveform(duration, df_hz, beta, n_sech, dphi1, dphi2))
+            #     bir4_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
+            #     pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
+            #                         amplitude=amplitude, rf_frequency=frequency,
+            #                         instantaneous_phase=phase)
+            #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
             elif params[1] == "bir4":
+                # Expected params list structure:
+                # [type, 'bir4', duration, amplitude, frequency, phase, awg, delay, 
+                #  dw0, beta, kappa, theta]
+                
                 envelope_type = params[1]
                 duration      = params[2]
                 amplitude     = params[3]
@@ -316,19 +228,30 @@ def add_pulses_to_program(program, pulse_params_list):
                 phase         = params[5]
                 awg_channel   = params[6]
                 pre_delay     = params[7]
-                df_hz         = params[8]     # 半扫频宽（Hz）
-                beta          = params[9]
-                n_sech        = params[10]
-                # 两次相位跳变，缺省为 π 旋转设置
-                dphi1 = params[11] if len(params) > 11 else 1.5*np.pi
-                dphi2 = params[12] if len(params) > 12 else -0.5*np.pi
+                
+                # Custom BIR4 params
+                # dw0: FM scaling (rad/s), matches params['dw0'] in simulation
+                dw0   = params[8]  
+                beta  = params[9]
+                kappa = params[10]
+                # Theta (flip angle), default to pi if not provided
+                theta = params[11] if len(params) > 11 else np.pi
 
-                time, envelope = zip(bir4_waveform(duration, df_hz, beta, n_sech, dphi1, dphi2))
-                bir4_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
+                # Generate Waveform
+                # Note: bir4_waveform returns [times, signal]
+                time_arr, signal_arr = bir4_waveform(duration, dw0, beta, kappa, theta)
+                
+                # Create QCS Envelope
+                bir4_env = qcs.ArbitraryEnvelope(time_arr, signal_arr)
+                
+                # Create Pulse
+                # amplitude param scales the normalized signal
                 pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
                                     amplitude=amplitude, rf_frequency=frequency,
                                     instantaneous_phase=phase)
+                                    
                 program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+
             else:
                 print("Pulse shape is unknown.")
             
@@ -403,25 +326,6 @@ def generate_filename_zdrive(date_str, filename):
     filepath = os.path.join(folder_path, filename)
     return filepath, folder_path
 
-# def run_exp(paras,pulse_params_list,mapper,render=False):
-#     program = qcs.Program()
-#     add_pulses_to_program(program, pulse_params_list)
-#     set_digitizer_range(mapper, 'dig', paras)
-#     program.n_shots(paras["shot_num"])
-#     execute_sequence = qcs.HclBackend(mapper, hw_demod=False, init_time=paras["init_time"])
-#     if not execute_sequence.is_system_ready():
-#         raise RuntimeError("System not ready.")
-
-#     if render==True:
-#         program.render()
-#     else:
-#         retValue = execute_sequence.apply(program)
-#         filepath, folder_path = generate_filename(paras, pulse_duration, re)
-#         save_data(retValue, filepath, paras, pulse_duration, folder_path)
-#         time.sleep(paras["sleep_time"])
-#         return retValue
-
-
 def vlin(st,ed,num_points):
     return np.linspace(st,ed,num_points)
 
@@ -436,133 +340,138 @@ def V2dB(V):
     return 10*np.log10( (V*Vref) **2/50/0.001)
 
 
-# import numpy as np
-
 # def bir4_waveform(tau, df_hz, beta, n=1.0,
-#                   dphi1=1.5*np.pi, dphi2=-0.5*np.pi,  # π 旋转的两次相位跳变
+#                   dphi1=1.5*np.pi, dphi2=-0.5*np.pi,
 #                   sample_rate=4.8e9):
 #     """
-#     生成 BIR-4-π 复包络（I+jQ），与 wurst_waveform 返回格式一致：
-#     返回 [times, signal]，其中 signal 为复数组（幅度 * e^{i*相位}）
-
-#     参数
-#     ----
-#     tau : float
-#         总时长 (s)
-#     df_hz : float
-#         半扫频宽（Hz），瞬时失谐：Δ(t) = ± 2π*df_hz * tanh(beta * u)
-#     beta : float
-#         绝热参数（控制时间-带宽积），建议满足 beta*(tau/4)/2 ≳ 3
-#     n : float
-#         sech^n 的 n（幅度包络：Ω(t) ∝ sech^n(beta*u)）
-#     dphi1, dphi2 : float
-#         两次相位跳变（单位：弧度），π 旋转默认 (3π/2, -π/2)
-#     sample_rate : float
-#         采样率（与你脚本一致）
-
-#     说明
-#     ----
-#     BIR-4 = AHP(FWD) → [Beff翻转 + 相位跳变1] → AHP(REV) →
-#             AHP(FWD) → [Beff翻转 + 相位跳变2] → AHP(REV)
-#     四段等长，各占 tau/4；第二、四段为时间反向镜像。
+#     BIR-4-π 复包络（与 wurst_waveform 返回格式一致）:
+#     :tau: 总时长 [s]
+#     :df_hz: 半扫频宽 [Hz]（总扫频≈ 2*df_hz）
+#     :beta: 绝热参数（经验: beta*(tau/4) ≳ 3）
+#     :n: 幅度包络 sech^n
+#     :dphi1, dphi2: 两次相位跳变（π 旋转默认 3π/2, -π/2）
+#     :sample_rate: 采样率 [Sa/s]
+#     返回: [times(s), signal=amp*exp(1j*phi)]
 #     """
-#     sr = sample_rate
+#     sr = float(sample_rate)
 #     N  = int(np.round(tau * sr))
 #     if N < 8:
-#         raise ValueError("tau 太短或采样率设置不当，导致采样点过少。")
+#         raise ValueError("tau 与 sample_rate 组合太短，采样点不足。")
 
-#     # 每段长度（最后一段吃掉余数，确保总长度=N）
+#     # 四段等长（最后一段吃掉取整误差），每段时长 Tq=tau/4
 #     Nq = N // 4
 #     Ns = [Nq, Nq, Nq, N - 3*Nq]
-#     Tq = [tau/4.0]*4
+#     Tq = tau / 4.0
 #     dt = 1.0 / sr
 
 #     def ahp_forward(ns, tq):
-#         # 局部时间从 -tq/2 到 +tq/2（不含右端点，避免边界重叠）
+#         # 局部时间 u ∈ [-tq/2, tq/2)
 #         u = np.linspace(-tq/2, tq/2, ns, endpoint=False)
-#         amp = 1.0 / (np.cosh(beta*u)**n)          # Ω 归一化包络（≤1）
-#         delta = (2*np.pi*df_hz) * np.tanh(beta*u) # 瞬时角频率偏移 Δ(t) (rad/s)
-#         return amp, delta
+#         amp   = 1.0 / (np.cosh(beta * u) ** n)                 # Ω(t) ≤ 1
+#         delta = (2.0*np.pi*df_hz) * np.tanh(beta * u)          # Δ(t) [rad/s]
+#         return amp.astype(np.float64), delta.astype(np.float64)
 
-#     # 四段：1 FWD, 2 REV, 3 FWD, 4 REV
-#     amp1, d1 = ahp_forward(Ns[0], Tq[0])
-#     amp2, d2 = ahp_forward(Ns[1], Tq[1]); amp2 = amp2[::-1]; d2 = -d2[::-1]
-#     amp3, d3 = ahp_forward(Ns[2], Tq[2])
-#     amp4, d4 = ahp_forward(Ns[3], Tq[3]); amp4 = amp4[::-1]; d4 = -d4[::-1]
+#     # 1:FWD, 2:REV, 3:FWD, 4:REV（REV=时间反向且Δ取负）
+#     amp1, d1 = ahp_forward(Ns[0], Tq)
+#     amp2, d2 = ahp_forward(Ns[1], Tq); amp2 = amp2[::-1]; d2 = -d2[::-1]
+#     amp3, d3 = ahp_forward(Ns[2], Tq)
+#     amp4, d4 = ahp_forward(Ns[3], Tq); amp4 = amp4[::-1]; d4 = -d4[::-1]
 
-#     amp = np.concatenate([amp1, amp2, amp3, amp4]).astype(np.float64)
-#     omg = np.concatenate([d1,   d2,   d3,   d4  ]).astype(np.float64)
+#     amp = np.concatenate([amp1, amp2, amp3, amp4])
+#     omg = np.concatenate([d1,   d2,   d3,   d4  ])            # Δ(t) [rad/s]
+#     phi = np.cumsum(omg) * dt                                  # 相位 = ∫Δ dt
 
-#     # 积分得到相位（相对载频的基带相位），并在段边界加入两次相位跳变
-#     phi = np.cumsum(omg) * dt  # 纯由 Δ(t) 积分得到的相位
-#     # 段边界索引（累计）
+#     # 段边界相位跳变（进入段2、进入段4）
 #     b1 = Ns[0]
-#     b2 = Ns[0] + Ns[1]
 #     b3 = Ns[0] + Ns[1] + Ns[2]
-
-#     # 相位跳变：在进入段2时加 dphi1；进入段4时再加 dphi2
 #     phi[b1:] += dphi1
 #     phi[b3:] += dphi2
 
-#     times  = np.arange(N) * dt
-#     signal = amp * np.exp(1j * phi)  # 复包络（不含外层 amplitude 参数）
+#     times  = np.linspace(0.0, tau, N, endpoint=False)          # 与你 WURST 一致
+#     signal = amp * np.exp(1j * phi)
 
 #     return [times, signal]
 
-
-def bir4_waveform(tau, df_hz, beta, n=1.0,
-                  dphi1=1.5*np.pi, dphi2=-0.5*np.pi,
-                  sample_rate=4.8e9):
+def bir4_waveform(tau, dw0, beta, kappa, theta=np.pi, sample_rate=4.8e9):
     """
-    BIR-4-π 复包络（与 wurst_waveform 返回格式一致）:
-    :tau: 总时长 [s]
-    :df_hz: 半扫频宽 [Hz]（总扫频≈ 2*df_hz）
-    :beta: 绝热参数（经验: beta*(tau/4) ≳ 3）
-    :n: 幅度包络 sech^n
-    :dphi1, dphi2: 两次相位跳变（π 旋转默认 3π/2, -π/2）
-    :sample_rate: 采样率 [Sa/s]
-    返回: [times(s), signal=amp*exp(1j*phi)]
+    BIR-4 Waveform generation matching the 'bir4_user' PyTorch implementation.
+    
+    Parameters
+    ----------
+    tau : float
+        Pulse duration [s]
+    dw0 : float
+        Frequency modulation scaling factor [rad/s] (approx bandwidth)
+    beta : float
+        AM shape parameter (tanh slope)
+    kappa : float
+        FM shape parameter (tanh slope)
+    theta : float
+        Target flip angle [rad], default is pi.
+    sample_rate : float
+        Sampling rate [Hz]
     """
-    sr = float(sample_rate)
-    N  = int(np.round(tau * sr))
-    if N < 8:
-        raise ValueError("tau 与 sample_rate 组合太短，采样点不足。")
+    # 1. Time Grid
+    n_samples = int(tau * sample_rate)
+    times = np.linspace(0, tau, n_samples)
+    dt = times[1] - times[0] if n_samples > 1 else 0
+    
+    # Normalized time t in [0, 1]
+    t = times / tau
+    
+    # 2. Define Segments
+    # Seg 1: [0, 0.25), Seg 2: [0.25, 0.5), Seg 3: [0.5, 0.75), Seg 4: [0.75, 1.0]
+    m1 = t < 0.25
+    m2 = (t >= 0.25) & (t < 0.5)
+    m3 = (t >= 0.5) & (t < 0.75)
+    m4 = t >= 0.75
+    
+    # 3. AM Envelope (a(t)) - using tanh as per bir4_user
+    # Logic: 
+    # a1 = tanh(beta * (1 - 4t))
+    # a2 = tanh(beta * (4t - 1))
+    # a3 = tanh(beta * (3 - 4t))
+    # a4 = tanh(beta * (4t - 3))
+    amp = np.zeros(n_samples)
+    amp[m1] = np.tanh(beta * (1 - 4 * t[m1]))
+    amp[m2] = np.tanh(beta * (4 * t[m2] - 1))
+    amp[m3] = np.tanh(beta * (3 - 4 * t[m3]))
+    amp[m4] = np.tanh(beta * (4 * t[m4] - 3))
+    
+    # 4. Phase Jump (dphi)
+    # Applied to the middle half (Seg 2 and Seg 3)
+    # dphi = pi + theta/2
+    phase_step = np.zeros(n_samples)
+    dphi = np.pi + theta / 2.0
+    phase_step[m2 | m3] = dphi
 
-    # 四段等长（最后一段吃掉取整误差），每段时长 Tq=tau/4
-    Nq = N // 4
-    Ns = [Nq, Nq, Nq, N - 3*Nq]
-    Tq = tau / 4.0
-    dt = 1.0 / sr
+    # 5. FM Envelope (omega(t)) -> Phase Integration
+    # Logic from bir4_user (using tanh, NOT tan):
+    # om1 = dw0 * tanh(kappa * 4t)
+    # om2 = dw0 * tanh(kappa * (4t - 2))
+    # om3 = dw0 * tanh(kappa * (4t - 2))
+    # om4 = dw0 * tanh(kappa * (4t - 4))
+    omega = np.zeros(n_samples)
+    omega[m1] = dw0 * np.tanh(kappa * (4 * t[m1]))
+    omega[m2] = dw0 * np.tanh(kappa * (4 * t[m2] - 2))
+    omega[m3] = dw0 * np.tanh(kappa * (4 * t[m3] - 2))
+    omega[m4] = dw0 * np.tanh(kappa * (4 * t[m4] - 4))
+    
+    # Force the last point to 0 to match PyTorch logic strictly (optional but safe)
+    if n_samples > 0:
+        omega[-1] = 0.0
 
-    def ahp_forward(ns, tq):
-        # 局部时间 u ∈ [-tq/2, tq/2)
-        u = np.linspace(-tq/2, tq/2, ns, endpoint=False)
-        amp   = 1.0 / (np.cosh(beta * u) ** n)                 # Ω(t) ≤ 1
-        delta = (2.0*np.pi*df_hz) * np.tanh(beta * u)          # Δ(t) [rad/s]
-        return amp.astype(np.float64), delta.astype(np.float64)
-
-    # 1:FWD, 2:REV, 3:FWD, 4:REV（REV=时间反向且Δ取负）
-    amp1, d1 = ahp_forward(Ns[0], Tq)
-    amp2, d2 = ahp_forward(Ns[1], Tq); amp2 = amp2[::-1]; d2 = -d2[::-1]
-    amp3, d3 = ahp_forward(Ns[2], Tq)
-    amp4, d4 = ahp_forward(Ns[3], Tq); amp4 = amp4[::-1]; d4 = -d4[::-1]
-
-    amp = np.concatenate([amp1, amp2, amp3, amp4])
-    omg = np.concatenate([d1,   d2,   d3,   d4  ])            # Δ(t) [rad/s]
-    phi = np.cumsum(omg) * dt                                  # 相位 = ∫Δ dt
-
-    # 段边界相位跳变（进入段2、进入段4）
-    b1 = Ns[0]
-    b3 = Ns[0] + Ns[1] + Ns[2]
-    phi[b1:] += dphi1
-    phi[b3:] += dphi2
-
-    times  = np.linspace(0.0, tau, N, endpoint=False)          # 与你 WURST 一致
-    signal = amp * np.exp(1j * phi)
-
+    # Integrate frequency to get FM phase
+    phi_fm = np.cumsum(omega) * dt
+    
+    # 6. Combine to Complex Signal
+    # signal = amp * exp(1j * (phase_step + phi_fm))
+    total_phase = phase_step + phi_fm
+    signal = amp * np.exp(1j * total_phase)
+    
+    # Normalize amplitude to 1.0 (QCS handles scaling via the 'amplitude' parameter)
+    max_val = np.max(np.abs(signal))
+    if max_val > 1e-12:
+        signal /= max_val
+        
     return [times, signal]
-
-
-
-
-

@@ -9,15 +9,15 @@ def call_mag():
     mag_x = rm.open_resource('TCPIP0::192.168.112.129::7180::SOCKET', read_termination = "\n", write_termination = "\n")
     return [mag_x,mag_y,mag_z]
 
-# def wake_mag(mag_x,mag_y,mag_z):
-#     for i in range(3):
-#         mag_x.query("PS?")
-#         mag_y.query("PS?")
-#         mag_z.query("PS?")
-#     for i in range(3):
-#         mag_x.query("FIELD:MAG?")
-#         mag_y.query("FIELD:MAG?")
-#         mag_z.query("FIELD:MAG?")
+def wake_mag(mag_x,mag_y,mag_z):
+    for i in range(3):
+        mag_x.query("PS?")
+        mag_y.query("PS?")
+        mag_z.query("PS?")
+    for i in range(3):
+        mag_x.query("FIELD:MAG?")
+        mag_y.query("FIELD:MAG?")
+        mag_z.query("FIELD:MAG?")
 
 def to_new_axis(v, phi = 0, psi = 0):# computes the resontaor X'',Y'',Z'' coordinates given the X,Y,Z magnet coordinates which is determined by phi and psi
     v = np.array(v)
