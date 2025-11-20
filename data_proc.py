@@ -88,30 +88,77 @@ def demodulate(signal, freq, window, t0, phase, window_type="uniform"):
         raise ValueError("Invalid window_type")
 
 
+# def readfile(file, **kwargs):
+#     if kwargs['demod_type']=="full":
+#         # signal = qcs.load(file).get_trace().values.ravel()#careful!
+#         with h5py.File(file, 'r') as f:
+#             signal = f['DutChannel_1_Acquisition_0/trace'][()]
+#         window = signal.shape[0]
+#     elif kwargs['demod_type']=="partial":
+#         with h5py.File(file, 'r') as f:
+#             signal = f['DutChannel_1_Acquisition_0/trace'][()][int(kwargs['st'] * kwargs['sample_rate']):int(kwargs['ed'] * kwargs['sample_rate'])]
+#         # signal = qcs.load(file).get_trace().values.ravel()[int(kwargs['st'] * kwargs['sample_rate']):int(kwargs['ed'] * kwargs['sample_rate'])]
+#         window = int( kwargs['sample_rate'] * kwargs['demod_len'] )
+#     else:
+#         raise ValueError("Invalid demod type. Choose 'full' or 'partial'.")
+#     return demodulate(signal, kwargs['demod_freq'], window, kwargs['st'], kwargs['demod_phase'], kwargs['window_type'])
+
 def readfile(file, **kwargs):
-    if kwargs['demod_type']=="full":
-        # signal = qcs.load(file).get_trace().values.ravel()#careful!
-        with h5py.File(file, 'r') as f:
-            signal = f['DutChannel_1_Acquisition_0/trace'][()]
-        window = signal.shape[0]
-    elif kwargs['demod_type']=="partial":
-        with h5py.File(file, 'r') as f:
-            signal = f['DutChannel_1_Acquisition_0/trace'][()][int(kwargs['st'] * kwargs['sample_rate']):int(kwargs['ed'] * kwargs['sample_rate'])]
-        # signal = qcs.load(file).get_trace().values.ravel()[int(kwargs['st'] * kwargs['sample_rate']):int(kwargs['ed'] * kwargs['sample_rate'])]
-        window = int( kwargs['sample_rate'] * kwargs['demod_len'] )
-    else:
-        raise ValueError("Invalid demod type. Choose 'full' or 'partial'.")
-    return demodulate(signal, kwargs['demod_freq'], window, kwargs['st'], kwargs['demod_phase'], kwargs['window_type'])
+    sr = kwargs.get('sample_rate', 4.8e9)
+    st = kwargs.get('st', 0)
+    
+    # 提前计算索引，减少文件打开期间的CPU耗时
+    if kwargs['demod_type'] == "partial":
+        i_start = int(st * sr)
+        i_end = int(kwargs['ed'] * sr)
+        window = int(sr * kwargs['demod_len'])
+    
+    # libver='latest': 使用最新内核加速元数据解析
+    # rdcc_nbytes: 增大块缓存到4MB(默认1MB)，大幅提升非连续数据的读取速度
+    with h5py.File(file, 'r', libver='latest', rdcc_nbytes=4*1024**2) as f:
+        dset = f['DutChannel_1_Acquisition_0/trace']
+        
+        if kwargs['demod_type'] == "full":
+            signal = dset[()] # 读取全部
+            window = signal.size
+        elif kwargs['demod_type'] == "partial":
+            signal = dset[i_start:i_end] # 利用HDF5切片直读，不读入无关数据
+        else:
+            raise ValueError("Invalid demod type")
 
-def calu_data(file, params):
-    with parallel_backend('loky', inner_max_num_threads=1):
-        demod_list = Parallel(n_jobs=-1)(
-            delayed(readfile)(f, **params) for f in file
-        )
+    return demodulate(signal, kwargs['demod_freq'], window, st, kwargs['demod_phase'], kwargs['window_type'])
 
-    time = demod_list[0][0]
-    demod2_data = np.stack( [d[1] for d in demod_list],axis=0 )
-    return time,demod2_data
+# def calu_data(file, params):
+#     with parallel_backend('loky', inner_max_num_threads=1):
+#         demod_list = Parallel(n_jobs=-1)(
+#             delayed(readfile)(f, **params) for f in file
+#         )
+
+#     time = demod_list[0][0]
+#     demod2_data = np.stack( [d[1] for d in demod_list],axis=0 )
+#     return time,demod2_data
+
+def calu_data(files, params):
+    # 1. 先处理第一个文件，获取时间轴和数据形状
+    time, first_data = readfile(files[0], **params)
+    
+    # 2. 预分配结果大数组，避免 np.stack 的巨大内存开销和拷贝时间
+    n_files = len(files)
+    results = np.empty((n_files, *first_data.shape), dtype=first_data.dtype)
+    results[0] = first_data # 填入第一个数据
+
+    # 定义写入函数，利用闭包直接写入共享内存 results
+    def fill_data(i):
+        _, data = readfile(files[i], **params)
+        results[i] = data # 线程直接写内存，无序列化开销
+
+    # 3. 使用多线程并行 (prefer='threads')
+    # HDF5 I/O 和 NumPy 计算释放 GIL，线程效率极高且无数据传输成本
+    Parallel(n_jobs=-1, require='sharedmem')(
+        delayed(fill_data)(i) for i in range(1, n_files)
+    )
+
+    return time, results
 
 
 def get_data(params):
