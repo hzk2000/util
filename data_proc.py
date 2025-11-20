@@ -7,6 +7,7 @@ except:
     pass
 from joblib import Parallel, delayed, parallel_backend
 from lmfit.models import ExpressionModel
+from scipy.signal import fftconvolve
 
 lorentz_mod = ExpressionModel('cst + A/(1+((x-x0)/g)**2)')
 sine_mod = ExpressionModel('cst - A * cos(3.14159265359 *x/x0)')
@@ -30,28 +31,61 @@ def load_parameters(filepath):
         return {key: dict(val) if isinstance(val, h5py.Group) else val[()]
                 for key, val in f['parameters'].items()}
 
-def demodulate(signal, freq, window, t0, phase, window_type="uniform"):   
+# def demodulate(signal, freq, window, t0, phase, window_type="uniform"):   
+#     f_samp = 4.8e9
+#     omega = 2*np.pi*freq    
+#     t = np.arange(0, len(signal)/f_samp, 1/f_samp)
+#     inter = signal * np.exp( 1j*( omega * ( t+t0 ) + phase ) ) 
+#     if window_type=="uniform":
+#         cumsum = np.cumsum(np.insert(inter,0,0))
+#         return t[window-1:], ((cumsum[window:]-cumsum[:-window])/window)
+#     elif window_type == "gaussian":
+#         weights = np.exp(-0.5 * (np.linspace(-1.5, 1.5, window) ** 2))
+#         weights /= weights.sum()
+
+#         weighted_sum = np.convolve(inter, weights, mode="valid")
+#         # weighted_sum = np.zeros(len(signal) - window + 1, dtype=np.complex128)
+#         # for i in range(len(weighted_sum)):
+#         #     weighted_sum[i] = np.sum(signal[i:i + window] * weights)
+
+#         return t[window-1:], weighted_sum
+#     else:
+#         raise ValueError("Invalid window_type. Choose 'gaussian' or 'uniform'.")
+
+def demodulate(signal, freq, window, t0, phase, window_type="uniform"):
     f_samp = 4.8e9
-    omega = 2*np.pi*freq    
-    t = np.arange(0, len(signal)/f_samp, 1/f_samp)
-    inter = signal * np.exp( 1j*( omega * ( t+t0 ) + phase ) ) 
-    if window_type=="uniform":
-        cumsum = np.cumsum(np.insert(inter,0,0))
-        return t[window-1:], ((cumsum[window:]-cumsum[:-window])/window)
+    n = len(signal)
+    
+    # 构造时间轴和混频信号
+    t = np.arange(n) / f_samp  # 生成时间数组
+    # 提取常数相位项，减少数组运算量
+    phase_const = np.exp(1j * (2 * np.pi * freq * t0 + phase)) 
+    inter = signal * np.exp(1j * 2 * np.pi * freq * t) * phase_const # 混频
+
+    # 预先切分出结果的时间轴，避免最后计算
+    t_out = t[window-1:] 
+
+    if window_type == "uniform":
+        # 使用累加和(cumsum)计算移动平均，复杂度为O(N)
+        cs = np.cumsum(inter)
+        
+        # 逻辑优化：避免使用 np.insert 产生的内存拷贝
+        # 结果 = (当前累加值 - window之前的累加值) / window
+        res = cs[window-1:].copy() # 获取包含足够数据点的部分
+        res[1:] -= cs[:-window]    # 向量化减去滑出窗口的值
+        return t_out, res / window
+        
     elif window_type == "gaussian":
-        weights = np.exp(-0.5 * (np.linspace(-1.5, 1.5, window) ** 2))
-        weights /= weights.sum()
-
-        weighted_sum = np.convolve(inter, weights, mode="valid")
-        # weighted_sum = np.zeros(len(signal) - window + 1, dtype=np.complex128)
-        # for i in range(len(weighted_sum)):
-        #     weighted_sum[i] = np.sum(signal[i:i + window] * weights)
-
-        return t[window-1:], weighted_sum
+        # 构造高斯核
+        kernel = np.exp(-0.5 * np.linspace(-1.5, 1.5, window) ** 2)
+        kernel /= kernel.sum() # 归一化
+        
+        # 使用基于FFT的卷积，复杂度O(N log N)，远快于普通卷积 O(N*window)
+        res = fftconvolve(inter, kernel, mode="valid")
+        return t_out, res
+        
     else:
-        raise ValueError("Invalid window_type. Choose 'gaussian' or 'uniform'.")
-
-
+        raise ValueError("Invalid window_type")
 
 
 def readfile(file, **kwargs):
@@ -75,36 +109,8 @@ def calu_data(file, params):
             delayed(readfile)(f, **params) for f in file
         )
 
-    # with h5py.File(params["tmp_file_path"], "w") as h5f:
-    #     tset = None
-    #     dset = None
-    #     for i, demod in enumerate(demod_list):
-    #         if dset is None:
-    #             t_dtype = demod[0].dtype
-    #             d_dtype = demod[1].dtype
-
-    #             tset = h5f.create_dataset(
-    #                 "time", (1, *demod[0].shape),
-    #                 maxshape=(None, *demod[0].shape), dtype=t_dtype
-    #             )
-    #             dset = h5f.create_dataset(
-    #                 "demod2", (1, *demod[1].shape),
-    #                 maxshape=(None, *demod[1].shape), dtype=d_dtype
-    #             )
-
-    #             tset[0] = demod[0]
-    #             dset[0] = demod[1]
-    #             time = demod[0]
-    #         else:
-    #             tset.resize(tset.shape[0] + 1, axis=0)
-    #             dset.resize(dset.shape[0] + 1, axis=0)
-
-    #             tset[-1] = demod[0]
-    #             dset[-1] = demod[1]
-
     time = demod_list[0][0]
     demod2_data = np.stack( [d[1] for d in demod_list],axis=0 )
-    # save_parameters(params["tmp_file_path"], params)
     return time,demod2_data
 
 
