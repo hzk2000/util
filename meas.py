@@ -69,214 +69,323 @@ def wideband_noise(duration, bw=2e6, noise_amp=1.0, offset=0.0, sample_rate=4.8e
     return times, noise_signal
 
 
-def generate_pulse(envelope_type, duration, amplitude, frequency, delay, awg, phase=0, rise=0):
-    if envelope_type == 'gaus':
-        envelope = qcs.GaussianEnvelope(2)
-        pulse = qcs.RFWaveform(duration=duration, envelope=envelope,
-                           amplitude=amplitude, rf_frequency=frequency,
-                           instantaneous_phase=phase)
-    elif envelope_type == 'square':
-        envelope = qcs.ConstantEnvelope()
-        pulse = qcs.RFWaveform(duration=duration, envelope=envelope,
-                           amplitude=amplitude, rf_frequency=frequency,
-                           instantaneous_phase=phase)
-    elif envelope_type == 'flat top gaus':
-        envelope = qcs.GaussianEnvelope()
-        pulse = qcs.DCWaveform(duration=rise*2, envelope=envelope,
-                           amplitude=amplitude)
-    else:
-        raise ValueError(f"unknown envelope: {envelope_type}")
+# def generate_pulse(envelope_type, duration, amplitude, frequency, delay, awg, phase=0, rise=0):
+#     if envelope_type == 'gaus':
+#         envelope = qcs.GaussianEnvelope(2)
+#         pulse = qcs.RFWaveform(duration=duration, envelope=envelope,
+#                            amplitude=amplitude, rf_frequency=frequency,
+#                            instantaneous_phase=phase)
+#     elif envelope_type == 'square':
+#         envelope = qcs.ConstantEnvelope()
+#         pulse = qcs.RFWaveform(duration=duration, envelope=envelope,
+#                            amplitude=amplitude, rf_frequency=frequency,
+#                            instantaneous_phase=phase)
+#     elif envelope_type == 'flat top gaus':
+#         envelope = qcs.GaussianEnvelope()
+#         pulse = qcs.DCWaveform(duration=rise*2, envelope=envelope,
+#                            amplitude=amplitude)
+#     else:
+#         raise ValueError(f"unknown envelope: {envelope_type}")
     
-    return pulse, awg, delay
+#     return pulse, awg, delay
 
+# def add_pulses_to_program(program, pulse_params_list):
+#     for params in pulse_params_list:
+#         pulse_type = params[0]
+#         if pulse_type == 'waveform':
+#             if params[1]=="square":
+#                 envelope_type = params[1]
+#                 duration = params[2]
+#                 amplitude = params[3]
+#                 frequency = params[4]
+#                 phase = params[5]
+#                 awg = params[6]
+#                 delay = params[7]
+#                 pulse, awg_channel, pre_delay = generate_pulse(
+#                     envelope_type, duration, amplitude, frequency, delay, awg, phase
+#                 )
+#                 program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+#             elif params[1]=="gaus":
+#                 envelope_type = params[1]
+#                 duration = params[2]
+#                 amplitude = params[3]
+#                 frequency = params[4]
+#                 phase = params[5]
+#                 awg = params[6]
+#                 delay = params[7]
+#                 pulse, awg_channel, pre_delay = generate_pulse(
+#                     envelope_type, duration, amplitude, frequency, delay, awg, phase
+#                 )
+#                 program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+#             elif params[1]=="flat top gaus":
+#                 envelope_type = params[1]
+#                 duration = params[2]
+#                 amplitude = params[3]
+#                 frequency = params[4]
+#                 phase = params[5]
+#                 awg = params[6]
+#                 delay = params[7]
+#                 rise = params[8]
+#                 pulse, awg_channel, pre_delay = generate_pulse(
+#                     envelope_type, duration, amplitude, frequency, delay, awg, phase, rise
+#                 )
+#                 program.add_waveform(pulse.to_flattop(duration), awg_channel, pre_delay=pre_delay)
+#             elif params[1]=="wurst":
+#                 envelope_type = params[1]
+#                 duration = params[2]
+#                 amplitude = params[3]
+#                 frequency = params[4]
+#                 phase = params[5]
+#                 awg_channel = params[6]
+#                 pre_delay = params[7]
+#                 bdw = params[8]
+#                 N = params[9]
+#                 phase_skew = params[10]
+
+#                 time, envelope = zip(wurst_waveform(duration, bdw*2*np.pi, N, phase_skew))
+#                 wurst_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
+#                 pulse = qcs.RFWaveform(duration=duration, envelope=wurst_env,
+#                            amplitude=amplitude, rf_frequency=frequency,
+#                            instantaneous_phase=phase)
+#                 program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+#             elif params[1] == "wideband_noise":
+#                 envelope_type = params[1]
+#                 duration = params[2]
+#                 noise_amp = params[3]       # rename for clarity
+#                 frequency = params[4]
+#                 phase = params[5]
+#                 awg_channel = params[6]
+#                 pre_delay = params[7]
+#                 bdw = params[8]
+#                 offset = params[9]
+
+#                 time, envelope = wideband_noise(duration, bw=bdw, noise_amp=noise_amp, offset=offset)
+
+#                 max_val = np.max(envelope)
+#                 envelope_scaled = envelope / max_val
+
+#                 noise_env = qcs.ArbitraryEnvelope(time, envelope_scaled)
+#                 # amplitude=1.0 ensures AWG doesn’t re-scale the envelope
+#                 pulse = qcs.RFWaveform(duration=duration, envelope=noise_env,
+#                                     amplitude=max_val,
+#                                     rf_frequency=frequency,
+#                                     instantaneous_phase=phase)
+#                 program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+#             # elif params[1] == "bir4":
+#             #     # 参数顺序与 wurst 分支尽量保持一致的风格：
+#             #     # ['waveform','bir4', duration, amplitude, frequency, phase, awg, pre_delay,
+#             #     #   df_hz, beta, n, dphi1, dphi2]
+#             #     envelope_type = params[1]
+#             #     duration     = params[2]
+#             #     amplitude    = params[3]
+#             #     frequency    = params[4]
+#             #     phase        = params[5]
+#             #     awg_channel  = params[6]
+#             #     pre_delay    = params[7]
+#             #     df_hz        = params[8]
+#             #     beta         = params[9]
+#             #     n            = params[10]
+#             #     dphi1        = params[11] if len(params) > 11 else 1.5*np.pi
+#             #     dphi2        = params[12] if len(params) > 12 else -0.5*np.pi
+
+#             #     time, envelope = zip(bir4_waveform(duration, df_hz, beta, n, dphi1, dphi2))
+#             #     bir4_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
+#             #     pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
+#             #                         amplitude=amplitude, rf_frequency=frequency,
+#             #                         instantaneous_phase=phase)
+#             #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+
+#             # elif params[1] == "bir4":
+#             #     envelope_type = params[1]
+#             #     duration      = params[2]
+#             #     amplitude     = params[3]
+#             #     frequency     = params[4]
+#             #     phase         = params[5]
+#             #     awg_channel   = params[6]
+#             #     pre_delay     = params[7]
+#             #     df_hz         = params[8]     # 半扫频宽（Hz）
+#             #     beta          = params[9]
+#             #     n_sech        = params[10]
+#             #     # 两次相位跳变，缺省为 π 旋转设置
+#             #     dphi1 = params[11] if len(params) > 11 else 1.5*np.pi
+#             #     dphi2 = params[12] if len(params) > 12 else -0.5*np.pi
+
+#             #     time, envelope = zip(bir4_waveform(duration, df_hz, beta, n_sech, dphi1, dphi2))
+#             #     bir4_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
+#             #     pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
+#             #                         amplitude=amplitude, rf_frequency=frequency,
+#             #                         instantaneous_phase=phase)
+#             #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+#             elif params[1] == "bir4":
+#                 # Expected params list structure:
+#                 # [type, 'bir4', duration, amplitude, frequency, phase, awg, delay, 
+#                 #  dw0, beta, kappa, theta]
+                
+#                 envelope_type = params[1]
+#                 duration      = params[2]
+#                 amplitude     = params[3]
+#                 frequency     = params[4]
+#                 phase         = params[5]
+#                 awg_channel   = params[6]
+#                 pre_delay     = params[7]
+                
+#                 # Custom BIR4 params
+#                 # dw0: FM scaling (rad/s), matches params['dw0'] in simulation
+#                 dw0   = params[8]  
+#                 beta  = params[9]
+#                 kappa = params[10]
+#                 # Theta (flip angle), default to pi if not provided
+#                 theta = params[11] if len(params) > 11 else np.pi
+
+#                 # Generate Waveform
+#                 # Note: bir4_waveform returns [times, signal]
+#                 time_arr, signal_arr = bir4_waveform(duration, dw0, beta, kappa, theta)
+                
+#                 # Create QCS Envelope
+#                 bir4_env = qcs.ArbitraryEnvelope(time_arr, signal_arr)
+                
+#                 # Create Pulse
+#                 # amplitude param scales the normalized signal
+#                 pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
+#                                     amplitude=amplitude, rf_frequency=frequency,
+#                                     instantaneous_phase=phase)
+                                    
+#                 program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+
+#             else:
+#                 print("Pulse shape is unknown.")
+            
+#         elif pulse_type == 'acquisition':
+#             envelope_type = params[1]
+#             duration = params[2]
+#             amplitude = params[3]
+#             frequency = params[4]
+#             phase = params[5]
+#             dig = params[6]
+#             delay = params[7]
+#             if envelope_type == 'square':
+#                 envelope = qcs.ConstantEnvelope()
+#             elif envelope_type == 'gaus':
+#                 envelope = qcs.GaussianEnvelope(2)
+#             else:
+#                 raise ValueError(f"Unknown envelope: {envelope_type}")
+#             integrationEnvelope = qcs.RFWaveform(
+#                 duration=duration,
+#                 envelope=envelope,
+#                 amplitude=amplitude,
+#                 rf_frequency=frequency
+#             )
+#             integrationFilter = qcs.IntegrationFilter(integrationEnvelope)
+#             program.add_acquisition(integrationFilter, dig, pre_delay=delay)
+
+import numpy as np
+import keysight.qcs as qcs
+
+# --- 1. 包络工厂：只负责生成 Envelope 对象 ---
+def create_envelope(env_type, duration, extras):
+    """
+    根据类型和额外参数生成 QCS Envelope 对象
+    """
+    if env_type == 'square':
+        return qcs.ConstantEnvelope()
+    
+    elif env_type == 'gaus':
+        return qcs.GaussianEnvelope(2)
+    
+    elif env_type == 'flat top gaus':
+        # extras: [rise_time]
+        return qcs.GaussianEnvelope() # Flat top 特殊处理，这里只返回基础包络
+    
+    elif env_type == 'wurst':
+        # extras: [bdw, N, phase_skew]
+        bdw, N, phase_skew = extras[:3]
+        # 直接解包，去掉 zip zip 的冗余操作
+        time, signal = wurst_waveform(duration, bdw * 2 * np.pi, N, phase_skew)
+        return qcs.ArbitraryEnvelope(time, signal)
+    
+    elif env_type == 'wideband_noise':
+        # extras: [bdw, offset]
+        bdw, offset = extras[:2]
+        time, signal = wideband_noise(duration, bw=bdw, noise_amp=1.0, offset=offset)
+        # 归一化逻辑保留
+        max_val = np.max(signal)
+        return qcs.ArbitraryEnvelope(time, signal / max_val), max_val
+    
+    elif env_type == 'bir4':
+        # extras: [dw0, beta, kappa, theta]
+        # 处理缺省参数 theta
+        dw0, beta, kappa = extras[:3]
+        theta = extras[3] if len(extras) > 3 else np.pi
+        
+        time, signal = bir4_waveform(duration, dw0, beta, kappa, theta)
+        return qcs.ArbitraryEnvelope(time, signal)
+
+    else:
+        raise ValueError(f"Unknown envelope type: {env_type}")
+
+# --- 2. 主流程优化 ---
 def add_pulses_to_program(program, pulse_params_list):
     for params in pulse_params_list:
-        pulse_type = params[0]
-        if pulse_type == 'waveform':
-            if params[1]=="square":
-                envelope_type = params[1]
-                duration = params[2]
-                amplitude = params[3]
-                frequency = params[4]
-                phase = params[5]
-                awg = params[6]
-                delay = params[7]
-                pulse, awg_channel, pre_delay = generate_pulse(
-                    envelope_type, duration, amplitude, frequency, delay, awg, phase
-                )
-                program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
-            elif params[1]=="gaus":
-                envelope_type = params[1]
-                duration = params[2]
-                amplitude = params[3]
-                frequency = params[4]
-                phase = params[5]
-                awg = params[6]
-                delay = params[7]
-                pulse, awg_channel, pre_delay = generate_pulse(
-                    envelope_type, duration, amplitude, frequency, delay, awg, phase
-                )
-                program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
-            elif params[1]=="flat top gaus":
-                envelope_type = params[1]
-                duration = params[2]
-                amplitude = params[3]
-                frequency = params[4]
-                phase = params[5]
-                awg = params[6]
-                delay = params[7]
-                rise = params[8]
-                pulse, awg_channel, pre_delay = generate_pulse(
-                    envelope_type, duration, amplitude, frequency, delay, awg, phase, rise
-                )
-                program.add_waveform(pulse.to_flattop(duration), awg_channel, pre_delay=pre_delay)
-            elif params[1]=="wurst":
-                envelope_type = params[1]
-                duration = params[2]
-                amplitude = params[3]
-                frequency = params[4]
-                phase = params[5]
-                awg_channel = params[6]
-                pre_delay = params[7]
-                bdw = params[8]
-                N = params[9]
-                phase_skew = params[10]
+        # --- 第一步：统一解包 (First Principles: 提取共性) ---
+        # 列表前8个参数对于所有 waveform 类型都是固定的
+        # *extras 捕获剩余的所有参数 (rise, bdw, beta 等)
+        pulse_category = params[0]
+        env_type = params[1]
+        duration, amplitude, frequency, phase, channel, pre_delay = params[2:8]
+        extras = params[8:]
 
-                time, envelope = zip(wurst_waveform(duration, bdw*2*np.pi, N, phase_skew))
-                wurst_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
-                pulse = qcs.RFWaveform(duration=duration, envelope=wurst_env,
-                           amplitude=amplitude, rf_frequency=frequency,
-                           instantaneous_phase=phase)
-                program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
-            elif params[1] == "wideband_noise":
-                envelope_type = params[1]
-                duration = params[2]
-                noise_amp = params[3]       # rename for clarity
-                frequency = params[4]
-                phase = params[5]
-                awg_channel = params[6]
-                pre_delay = params[7]
-                bdw = params[8]
-                offset = params[9]
-
-                time, envelope = wideband_noise(duration, bw=bdw, noise_amp=noise_amp, offset=offset)
-
-                max_val = np.max(envelope)
-                envelope_scaled = envelope / max_val
-
-                noise_env = qcs.ArbitraryEnvelope(time, envelope_scaled)
-                # amplitude=1.0 ensures AWG doesn’t re-scale the envelope
-                pulse = qcs.RFWaveform(duration=duration, envelope=noise_env,
-                                    amplitude=max_val,
-                                    rf_frequency=frequency,
-                                    instantaneous_phase=phase)
-                program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
-            # elif params[1] == "bir4":
-            #     # 参数顺序与 wurst 分支尽量保持一致的风格：
-            #     # ['waveform','bir4', duration, amplitude, frequency, phase, awg, pre_delay,
-            #     #   df_hz, beta, n, dphi1, dphi2]
-            #     envelope_type = params[1]
-            #     duration     = params[2]
-            #     amplitude    = params[3]
-            #     frequency    = params[4]
-            #     phase        = params[5]
-            #     awg_channel  = params[6]
-            #     pre_delay    = params[7]
-            #     df_hz        = params[8]
-            #     beta         = params[9]
-            #     n            = params[10]
-            #     dphi1        = params[11] if len(params) > 11 else 1.5*np.pi
-            #     dphi2        = params[12] if len(params) > 12 else -0.5*np.pi
-
-            #     time, envelope = zip(bir4_waveform(duration, df_hz, beta, n, dphi1, dphi2))
-            #     bir4_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
-            #     pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
-            #                         amplitude=amplitude, rf_frequency=frequency,
-            #                         instantaneous_phase=phase)
-            #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+        # --- 第二步：分支处理 ---
+        if pulse_category == 'waveform':
+            # 2.1 特殊处理 Flat Top (因为它是 DCWaveform 且结构特殊)
+            if env_type == 'flat top gaus':
+                rise = extras[0]
+                base_env = create_envelope(env_type, duration, extras)
+                # Flat top 需要先生成 pulse 再转换
+                temp_pulse = qcs.DCWaveform(duration=rise*2, envelope=base_env, amplitude=amplitude)
+                pulse = temp_pulse.to_flattop(duration)
+                # DCWaveform 不接受 rf_frequency/phase，通常用于 Z 线，如果需要调制需额外处理
             
-            # elif params[1] == "bir4":
-            #     envelope_type = params[1]
-            #     duration      = params[2]
-            #     amplitude     = params[3]
-            #     frequency     = params[4]
-            #     phase         = params[5]
-            #     awg_channel   = params[6]
-            #     pre_delay     = params[7]
-            #     df_hz         = params[8]     # 半扫频宽（Hz）
-            #     beta          = params[9]
-            #     n_sech        = params[10]
-            #     # 两次相位跳变，缺省为 π 旋转设置
-            #     dphi1 = params[11] if len(params) > 11 else 1.5*np.pi
-            #     dphi2 = params[12] if len(params) > 12 else -0.5*np.pi
-
-            #     time, envelope = zip(bir4_waveform(duration, df_hz, beta, n_sech, dphi1, dphi2))
-            #     bir4_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
-            #     pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
-            #                         amplitude=amplitude, rf_frequency=frequency,
-            #                         instantaneous_phase=phase)
-            #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
-            elif params[1] == "bir4":
-                # Expected params list structure:
-                # [type, 'bir4', duration, amplitude, frequency, phase, awg, delay, 
-                #  dw0, beta, kappa, theta]
-                
-                envelope_type = params[1]
-                duration      = params[2]
-                amplitude     = params[3]
-                frequency     = params[4]
-                phase         = params[5]
-                awg_channel   = params[6]
-                pre_delay     = params[7]
-                
-                # Custom BIR4 params
-                # dw0: FM scaling (rad/s), matches params['dw0'] in simulation
-                dw0   = params[8]  
-                beta  = params[9]
-                kappa = params[10]
-                # Theta (flip angle), default to pi if not provided
-                theta = params[11] if len(params) > 11 else np.pi
-
-                # Generate Waveform
-                # Note: bir4_waveform returns [times, signal]
-                time_arr, signal_arr = bir4_waveform(duration, dw0, beta, kappa, theta)
-                
-                # Create QCS Envelope
-                bir4_env = qcs.ArbitraryEnvelope(time_arr, signal_arr)
-                
-                # Create Pulse
-                # amplitude param scales the normalized signal
-                pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
-                                    amplitude=amplitude, rf_frequency=frequency,
-                                    instantaneous_phase=phase)
-                                    
-                program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
-
             else:
-                print("Pulse shape is unknown.")
-            
-        elif pulse_type == 'acquisition':
-            envelope_type = params[1]
-            duration = params[2]
-            amplitude = params[3]
-            frequency = params[4]
-            phase = params[5]
-            dig = params[6]
-            delay = params[7]
-            if envelope_type == 'square':
-                envelope = qcs.ConstantEnvelope()
-            elif envelope_type == 'gaus':
-                envelope = qcs.GaussianEnvelope(2)
+                # 2.2 通用处理：生成包络 -> 生成波形
+                res = create_envelope(env_type, duration, extras)
+                
+                # 处理 noise 这种返回 (env, max_val) 的特殊情况
+                if isinstance(res, tuple):
+                    envelope, real_amp_scale = res
+                    final_amp = real_amp_scale # Noise 用计算出的最大值覆盖设定值
+                else:
+                    envelope = res
+                    final_amp = amplitude
+
+                pulse = qcs.RFWaveform(
+                    duration=duration,
+                    envelope=envelope,
+                    amplitude=final_amp,
+                    rf_frequency=frequency,
+                    instantaneous_phase=phase
+                )
+
+            # 2.3 统一添加到程序
+            program.add_waveform(pulse, channel, pre_delay=pre_delay)
+
+        elif pulse_category == 'acquisition':
+            # Acquisition 逻辑
+            if env_type == 'square':
+                acq_env = qcs.ConstantEnvelope()
+            elif env_type == 'gaus':
+                acq_env = qcs.GaussianEnvelope(2)
             else:
-                raise ValueError(f"Unknown envelope: {envelope_type}")
-            integrationEnvelope = qcs.RFWaveform(
-                duration=duration,
-                envelope=envelope,
-                amplitude=amplitude,
-                rf_frequency=frequency
+                raise ValueError(f"Unknown acquisition envelope: {env_type}")
+
+            integration_pulse = qcs.RFWaveform(
+                duration=duration, envelope=acq_env,
+                amplitude=amplitude, rf_frequency=frequency
             )
-            integrationFilter = qcs.IntegrationFilter(integrationEnvelope)
-            program.add_acquisition(integrationFilter, dig, pre_delay=delay)
+            integration_filter = qcs.IntegrationFilter(integration_pulse)
+            program.add_acquisition(integration_filter, channel, pre_delay=pre_delay)
+
+        else:
+            print(f"Unknown pulse category: {pulse_category}")
 
 
 def set_digitizer_range(mapper, dig_name, paras):
