@@ -1,35 +1,74 @@
+# import h5py
+# import numpy as np
+# try:
+#     import keysight.qcs as qcs
+# except:
+#     print("No Keysight package")
+#     pass
+# from joblib import Parallel, delayed, parallel_backend
+# from lmfit.models import ExpressionModel
+# from scipy.signal import fftconvolve
+
+# lorentz_mod = ExpressionModel('cst + A/(1+((x-x0)/g)**2)')
+# sine_mod = ExpressionModel('cst - A * cos(3.14159265359 *x/x0)')
+# exp_mod = ExpressionModel('cst + A * exp(- x/T)')
+# ramsey_mod = ExpressionModel('cst + A * exp(- x/T) * cos(6.28318530718 * Df * x + phi)')
+# parabola_mod = ExpressionModel('a*(x-x0)**2+cst')
+
+# def save_parameters(filepath, parameters):
+#     with h5py.File(filepath, 'a') as f:
+#         param_group = f.require_group('parameters')
+#         for key, value in parameters.items():
+#             if isinstance(value, dict):  
+#                 step_group = param_group.require_group(key)
+#                 for sub_key, sub_value in value.items():
+#                     step_group[sub_key] = sub_value
+#             else:
+#                 param_group[key] = value
+
+# def load_parameters(filepath):
+#     with h5py.File(filepath, 'r') as f:
+#         return {key: dict(val) if isinstance(val, h5py.Group) else val[()]
+#                 for key, val in f['parameters'].items()}
+
 import h5py
 import numpy as np
-try:
-    import keysight.qcs as qcs
-except:
-    print("No Keysight package")
-    pass
-from joblib import Parallel, delayed, parallel_backend
-from lmfit.models import ExpressionModel
-from scipy.signal import fftconvolve
+from numpy.fft import rfft, rfftfreq
+from lmfit.models import LorentzianModel, ExponentialModel, LinearModel
 
-lorentz_mod = ExpressionModel('cst + A/(1+((x-x0)/g)**2)')
-sine_mod = ExpressionModel('cst - A * cos(3.14159265359 *x/x0)')
-exp_mod = ExpressionModel('cst + A * exp(- x/T)')
-ramsey_mod = ExpressionModel('cst + A * exp(- x/T) * cos(6.28318530718 * Df * x + phi)')
-parabola_mod = ExpressionModel('a*(x-x0)**2+cst')
+# --- 1. 模型优化: 使用内置高性能模型，避免字符串解析 ---
+# 组合模型比手写字符串快且稳定
+lorentz_mod = LorentzianModel() + LinearModel(prefix='cst_') # A/(...) + cst
+exp_mod = ExponentialModel() + LinearModel(prefix='cst_')    # A*exp(-x/t) + cst
+parabola_mod = PolynomialModel(degree=2)
 
-def save_parameters(filepath, parameters):
-    with h5py.File(filepath, 'a') as f:
-        param_group = f.require_group('parameters')
-        for key, value in parameters.items():
-            if isinstance(value, dict):  
-                step_group = param_group.require_group(key)
-                for sub_key, sub_value in value.items():
-                    step_group[sub_key] = sub_value
-            else:
-                param_group[key] = value
+# Ramsey 和 Sine 这种特殊组合保留 ExpressionModel 或自定义函数
+# 为了速度，建议用 python 函数定义而非字符串
+def ramsey_func(x, A, T, Df, phi, cst):
+    return cst + A * np.exp(-x/T) * np.cos(2 * np.pi * Df * x + phi)
+ramsey_mod = Model(ramsey_func)
+
+def sine_func(x, A, x0, cst):
+    return cst - A * np.cos(np.pi * x / x0)
+sine_mod = Model(sine_func)
+
 
 def load_parameters(filepath):
-    with h5py.File(filepath, 'r') as f:
-        return {key: dict(val) if isinstance(val, h5py.Group) else val[()]
-                for key, val in f['parameters'].items()}
+    with h5py.File(filepath, 'r', libver='latest', swmr=True) as f:
+        grp = f['parameters']
+        params = dict(grp.attrs) # 加载顶层属性
+        
+        # 加载子组属性
+        for key in grp.keys():
+            params[key] = dict(grp[key].attrs)
+        return params
+
+def get_data(params):
+    # 移除 print 阻塞，使用 swmr (Single Writer Multiple Reader) 模式防止读取冲突
+    with h5py.File(params["tmp_file_path"], "r", libver='latest', swmr=True) as h5f:
+        # 直接读取，利用切片或全读
+        return h5f["time"][()], h5f["demod2"][()]
+
 
 # def demodulate(signal, freq, window, t0, phase, window_type="uniform"):   
 #     f_samp = 4.8e9
@@ -162,161 +201,89 @@ def load_parameters(filepath):
 
 
 
-# # 核心解调逻辑：纯数学运算，无多余对象
-# def core_process(signal, freq, window, t0, phase, window_type):
-#     n = len(signal)
-#     f_samp = 4.8e9
+# 核心解调逻辑：纯数学运算，无多余对象
+def core_process(signal, freq, window, t0, phase, window_type):
+    n = len(signal)
+    f_samp = 4.8e9
     
-#     # 1. 混频 (Mixing)
-#     # 利用广播机制和复数旋转，避免生成巨大的时间数组 t
-#     # 相对时间 t_rel 用于生成旋转因子
-#     t_rel = np.arange(n) / f_samp
-#     # 初始相位包含 t0 和 phase，一次性算好
-#     phase_init = np.exp(1j * (2 * np.pi * freq * t0 + phase))
-#     inter = signal * np.exp(1j * 2 * np.pi * freq * t_rel) * phase_init
+    # 1. 混频 (Mixing)
+    # 利用广播机制和复数旋转，避免生成巨大的时间数组 t
+    # 相对时间 t_rel 用于生成旋转因子
+    t_rel = np.arange(n) / f_samp
+    # 初始相位包含 t0 和 phase，一次性算好
+    phase_init = np.exp(1j * (2 * np.pi * freq * t0 + phase))
+    inter = signal * np.exp(1j * 2 * np.pi * freq * t_rel) * phase_init
 
-#     # 2. 滤波 (Filtering)
-#     if window_type == "uniform":
-#         # 利用 cumsum 实现 O(N) 复杂度的 Boxcar 滤波
-#         cs = np.cumsum(inter)
-#         # 向量化切片相减，避免 insert/loop
-#         res = (cs[window-1:] - np.concatenate(([0], cs[:-window]))) / window
-#         # 注意：上面的写法是为了处理边界，比 insert 快且省内存
-#         # 第一点单独修正：cs[window-1] - 0
-#         res[0] = cs[window-1] / window 
-#         return res
+    # 2. 滤波 (Filtering)
+    if window_type == "uniform":
+        # 利用 cumsum 实现 O(N) 复杂度的 Boxcar 滤波
+        cs = np.cumsum(inter)
+        # 向量化切片相减，避免 insert/loop
+        res = (cs[window-1:] - np.concatenate(([0], cs[:-window]))) / window
+        # 注意：上面的写法是为了处理边界，比 insert 快且省内存
+        # 第一点单独修正：cs[window-1] - 0
+        res[0] = cs[window-1] / window 
+        return res
         
-#     elif window_type == "gaussian":
-#         # 预计算高斯核 (假设 window 大小固定，这里每次算也很快，瓶颈在卷积)
-#         # 如果 window 很大，fftconvolve (O(N logN)) 比 convolve (O(N*W)) 快几十倍
-#         kernel = np.exp(-0.5 * np.linspace(-1.5, 1.5, window) ** 2)
-#         kernel /= kernel.sum()
-#         return fftconvolve(inter, kernel, mode="valid")
-
-# def calu_data(files, params):
-#     # 1. 参数预处理 (避免在循环中重复查字典)
-#     sr = params.get('sample_rate', 4.8e9)
-#     freq = params['demod_freq']
-#     phase = params['demod_phase']
-#     w_type = params['window_type']
-#     d_type = params['demod_type']
-#     st_time = params.get('st', 0)
-    
-#     # 提前计算切片索引
-#     if d_type == "partial":
-#         i_st, i_ed = int(st_time * sr), int(params['ed'] * sr)
-#         win_len = int(sr * params['demod_len'])
-#     else:
-#         win_len = None # Full 模式下需读取文件后确定
-
-#     # 2. 预读取第一个文件以分配内存 (Memory Pre-allocation)
-#     # 这是防止内存碎片的关键
-#     with h5py.File(files[0], 'r') as f:
-#         dset = f['DutChannel_1_Acquisition_0/trace']
-#         if d_type == "partial":
-#             sig_0 = dset[i_st:i_ed]
-#         else:
-#             sig_0 = dset[()]
-#             win_len = sig_0.size # Full模式下更新 window
-    
-#     # 计算输出的时间轴 (只需计算一次)
-#     t_total = np.arange(len(sig_0)) / sr + st_time
-#     t_out = t_total[win_len-1:]
-    
-#     # 预分配结果大数组 (Shared Memory)
-#     n_files = len(files)
-#     res_len = len(sig_0) - win_len + 1
-#     results = np.empty((n_files, res_len), dtype=np.complex128)
-
-#     # 3. 定义工作函数 (闭包)
-#     # 直接写入 results，无返回值，无序列化开销
-#     def worker(i, file_path):
-#         with h5py.File(file_path, 'r', libver='latest', rdcc_nbytes=4*1024**2) as f:
-#             dset = f['DutChannel_1_Acquisition_0/trace']
-#             # 只读硬盘上需要的那一段
-#             raw = dset[i_st:i_ed] if d_type == "partial" else dset[()]
-            
-#         # 计算并直接写入共享内存
-#         results[i] = core_process(raw, freq, win_len, st_time, phase, w_type)
-
-#     # 4. 多线程并行执行
-#     # require='sharedmem' 确保线程共享 results 数组
-#     Parallel(n_jobs=-1, require='sharedmem', prefer='threads')(
-#         delayed(worker)(i, f) for i, f in enumerate(files)
-#     )
-
-#     return t_out, results
-
-
+    elif window_type == "gaussian":
+        # 预计算高斯核 (假设 window 大小固定，这里每次算也很快，瓶颈在卷积)
+        # 如果 window 很大，fftconvolve (O(N logN)) 比 convolve (O(N*W)) 快几十倍
+        kernel = np.exp(-0.5 * np.linspace(-1.5, 1.5, window) ** 2)
+        kernel /= kernel.sum()
+        return fftconvolve(inter, kernel, mode="valid")
 
 def calu_data(files, params):
-    # --- 第一性原理步骤 1: 预计算一切不仅变量 (Pre-computation) ---
-    # 避免在循环内部做任何重复的三角函数或指数运算
-    
+    # 1. 参数预处理 (避免在循环中重复查字典)
     sr = params.get('sample_rate', 4.8e9)
     freq = params['demod_freq']
-    st = params.get('st', 0)
-    d_type = params['demod_type']
+    phase = params['demod_phase']
     w_type = params['window_type']
+    d_type = params['demod_type']
+    st_time = params.get('st', 0)
     
-    # 1.1 确定数据尺寸
+    # 提前计算切片索引
     if d_type == "partial":
-        i_st, i_ed = int(st * sr), int(params['ed'] * sr)
-        read_slice = slice(i_st, i_ed)
-        trace_len = i_ed - i_st
+        i_st, i_ed = int(st_time * sr), int(params['ed'] * sr)
         win_len = int(sr * params['demod_len'])
     else:
-        # Full模式需先读一个文件获取长度
-        with h5py.File(files[0], 'r') as f:
-            dummy = f['DutChannel_1_Acquisition_0/trace']
-            trace_len = dummy.shape[0]
-        read_slice = slice(None)
-        win_len = trace_len # Full模式通常 window 就是全长，或需用户指定
-        
-    # 1.2 预计算旋转向量 (Phasor) - 核心优化
-    # 所有 trace 的时间轴 t 都是一样的，因此 exp(iwt) 只算一次
-    t_rel = np.arange(trace_len) / sr
-    # 包含 t0 和 phase 的最终旋转向量
-    # 这一步把几百万次 sin/cos 运算压缩到了循环外
-    phasor = np.exp(1j * (2 * np.pi * freq * (t_rel + st) + params['demod_phase']))
+        win_len = None # Full 模式下需读取文件后确定
 
-    # 1.3 预计算高斯核 (如果是 Gaussian)
-    kernel = None
-    if w_type == "gaussian":
-        kernel = np.exp(-0.5 * np.linspace(-1.5, 1.5, win_len) ** 2)
-        kernel /= kernel.sum()
-
-    # 1.4 预分配共享内存 (Output Buffer)
-    res_len = trace_len - win_len + 1
-    results = np.empty((len(files), res_len), dtype=np.complex128)
-
-    # --- 第一性原理步骤 2: 极简核心任务 (Kernel) ---
-    def task(i, file_path):
-        # IO: 只读需要的字节
-        with h5py.File(file_path, 'r', libver='latest', rdcc_nbytes=4*1024**2) as f:
-            raw = f['DutChannel_1_Acquisition_0/trace'][read_slice]
-        
-        # Compute: 仅做线性代数运算 (向量乘法)
-        inter = raw * phasor 
-        
-        # Filter: 
-        if w_type == "uniform":
-            cs = np.cumsum(inter)
-            # 向量化处理边界，写入共享内存
-            results[i] = (cs[win_len-1:] - np.concatenate(([0], cs[:-win_len]))) / win_len
-            results[i, 0] = cs[win_len-1] / win_len
+    # 2. 预读取第一个文件以分配内存 (Memory Pre-allocation)
+    # 这是防止内存碎片的关键
+    with h5py.File(files[0], 'r') as f:
+        dset = f['DutChannel_1_Acquisition_0/trace']
+        if d_type == "partial":
+            sig_0 = dset[i_st:i_ed]
         else:
-            # FFT卷积
-            results[i] = fftconvolve(inter, kernel, mode="valid")
+            sig_0 = dset[()]
+            win_len = sig_0.size # Full模式下更新 window
+    
+    # 计算输出的时间轴 (只需计算一次)
+    t_total = np.arange(len(sig_0)) / sr + st_time
+    t_out = t_total[win_len-1:]
+    
+    # 预分配结果大数组 (Shared Memory)
+    n_files = len(files)
+    res_len = len(sig_0) - win_len + 1
+    results = np.empty((n_files, res_len), dtype=np.complex128)
 
-    # --- 第一性原理步骤 3: 并行流 (Parallel Stream) ---
-    # 线程共享 phasor 和 kernel (只读)，无复制开销
+    # 3. 定义工作函数 (闭包)
+    # 直接写入 results，无返回值，无序列化开销
+    def worker(i, file_path):
+        with h5py.File(file_path, 'r', libver='latest', rdcc_nbytes=4*1024**2) as f:
+            dset = f['DutChannel_1_Acquisition_0/trace']
+            # 只读硬盘上需要的那一段
+            raw = dset[i_st:i_ed] if d_type == "partial" else dset[()]
+            
+        # 计算并直接写入共享内存
+        results[i] = core_process(raw, freq, win_len, st_time, phase, w_type)
+
+    # 4. 多线程并行执行
+    # require='sharedmem' 确保线程共享 results 数组
     Parallel(n_jobs=-1, require='sharedmem', prefer='threads')(
-        delayed(task)(i, f) for i, f in enumerate(files)
+        delayed(worker)(i, f) for i, f in enumerate(files)
     )
 
-    # 计算时间轴 (仅一次)
-    t_out = (np.arange(res_len) / sr) + st + (win_len-1)/sr
     return t_out, results
 
 

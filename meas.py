@@ -360,11 +360,26 @@ def set_digitizer_range(mapper, dig_name, paras):
     digiChannel = mapper.get_physical_channels(dig_name)
     digiChannel[0].settings.range.value = paras["Digi_Range"]
 
+# def save_parameters(filepath, parameters):
+#     with h5py.File(filepath, 'a') as f:
+#         param_group = f.create_group('parameters')
+#         for key, value in parameters.items():
+#             param_group.attrs[key] = value
+
+# --- 2. HDF5 I/O 优化: 利用 attrs 和 latest内核 ---
 def save_parameters(filepath, parameters):
-    with h5py.File(filepath, 'a') as f:
-        param_group = f.create_group('parameters')
+    # 使用 libver='latest' 加速文件结构写入
+    with h5py.File(filepath, 'a', libver='latest') as f:
+        # 优先检查 parameters 是否存在
+        grp = f.require_group('parameters')
+        
         for key, value in parameters.items():
-            param_group.attrs[key] = value
+            if isinstance(value, dict):
+                sub_grp = grp.require_group(key)
+                # 字典通常是元数据，存为 attrs 最快且最符合 HDF5 语义
+                sub_grp.attrs.update(value) 
+            else:
+                grp.attrs[key] = value
 
 def create_directory(directory):
     if not os.path.exists(directory):
@@ -421,7 +436,7 @@ def V2dB(V):
     return 10*np.log10( (V*Vref) **2/50/0.001)
 
 
-import numpy as np
+# import numpy as np
 
 # def bir4_waveform(tau, df_hz, beta, n=1.0,
 #                   dphi1=1.5*np.pi, dphi2=-0.5*np.pi,  # π 旋转的两次相位跳变
