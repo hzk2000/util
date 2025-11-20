@@ -52,40 +52,40 @@ def load_parameters(filepath):
 #     else:
 #         raise ValueError("Invalid window_type. Choose 'gaussian' or 'uniform'.")
 
-def demodulate(signal, freq, window, t0, phase, window_type="uniform"):
-    f_samp = 4.8e9
-    n = len(signal)
+# def demodulate(signal, freq, window, t0, phase, window_type="uniform"):
+#     f_samp = 4.8e9
+#     n = len(signal)
     
-    # 构造时间轴和混频信号
-    t = np.arange(n) / f_samp  # 生成时间数组
-    # 提取常数相位项，减少数组运算量
-    phase_const = np.exp(1j * (2 * np.pi * freq * t0 + phase)) 
-    inter = signal * np.exp(1j * 2 * np.pi * freq * t) * phase_const # 混频
+#     # 构造时间轴和混频信号
+#     t = np.arange(n) / f_samp  # 生成时间数组
+#     # 提取常数相位项，减少数组运算量
+#     phase_const = np.exp(1j * (2 * np.pi * freq * t0 + phase)) 
+#     inter = signal * np.exp(1j * 2 * np.pi * freq * t) * phase_const # 混频
 
-    # 预先切分出结果的时间轴，避免最后计算
-    t_out = t[window-1:] 
+#     # 预先切分出结果的时间轴，避免最后计算
+#     t_out = t[window-1:] 
 
-    if window_type == "uniform":
-        # 使用累加和(cumsum)计算移动平均，复杂度为O(N)
-        cs = np.cumsum(inter)
+#     if window_type == "uniform":
+#         # 使用累加和(cumsum)计算移动平均，复杂度为O(N)
+#         cs = np.cumsum(inter)
         
-        # 逻辑优化：避免使用 np.insert 产生的内存拷贝
-        # 结果 = (当前累加值 - window之前的累加值) / window
-        res = cs[window-1:].copy() # 获取包含足够数据点的部分
-        res[1:] -= cs[:-window]    # 向量化减去滑出窗口的值
-        return t_out, res / window
+#         # 逻辑优化：避免使用 np.insert 产生的内存拷贝
+#         # 结果 = (当前累加值 - window之前的累加值) / window
+#         res = cs[window-1:].copy() # 获取包含足够数据点的部分
+#         res[1:] -= cs[:-window]    # 向量化减去滑出窗口的值
+#         return t_out, res / window
         
-    elif window_type == "gaussian":
-        # 构造高斯核
-        kernel = np.exp(-0.5 * np.linspace(-1.5, 1.5, window) ** 2)
-        kernel /= kernel.sum() # 归一化
+#     elif window_type == "gaussian":
+#         # 构造高斯核
+#         kernel = np.exp(-0.5 * np.linspace(-1.5, 1.5, window) ** 2)
+#         kernel /= kernel.sum() # 归一化
         
-        # 使用基于FFT的卷积，复杂度O(N log N)，远快于普通卷积 O(N*window)
-        res = fftconvolve(inter, kernel, mode="valid")
-        return t_out, res
+#         # 使用基于FFT的卷积，复杂度O(N log N)，远快于普通卷积 O(N*window)
+#         res = fftconvolve(inter, kernel, mode="valid")
+#         return t_out, res
         
-    else:
-        raise ValueError("Invalid window_type")
+#     else:
+#         raise ValueError("Invalid window_type")
 
 
 # def readfile(file, **kwargs):
@@ -103,30 +103,30 @@ def demodulate(signal, freq, window, t0, phase, window_type="uniform"):
 #         raise ValueError("Invalid demod type. Choose 'full' or 'partial'.")
 #     return demodulate(signal, kwargs['demod_freq'], window, kwargs['st'], kwargs['demod_phase'], kwargs['window_type'])
 
-def readfile(file, **kwargs):
-    sr = kwargs.get('sample_rate', 4.8e9)
-    st = kwargs.get('st', 0)
+# def readfile(file, **kwargs):
+#     sr = kwargs.get('sample_rate', 4.8e9)
+#     st = kwargs.get('st', 0)
     
-    # 提前计算索引，减少文件打开期间的CPU耗时
-    if kwargs['demod_type'] == "partial":
-        i_start = int(st * sr)
-        i_end = int(kwargs['ed'] * sr)
-        window = int(sr * kwargs['demod_len'])
+#     # 提前计算索引，减少文件打开期间的CPU耗时
+#     if kwargs['demod_type'] == "partial":
+#         i_start = int(st * sr)
+#         i_end = int(kwargs['ed'] * sr)
+#         window = int(sr * kwargs['demod_len'])
     
-    # libver='latest': 使用最新内核加速元数据解析
-    # rdcc_nbytes: 增大块缓存到4MB(默认1MB)，大幅提升非连续数据的读取速度
-    with h5py.File(file, 'r', libver='latest', rdcc_nbytes=4*1024**2) as f:
-        dset = f['DutChannel_1_Acquisition_0/trace']
+#     # libver='latest': 使用最新内核加速元数据解析
+#     # rdcc_nbytes: 增大块缓存到4MB(默认1MB)，大幅提升非连续数据的读取速度
+#     with h5py.File(file, 'r', libver='latest', rdcc_nbytes=4*1024**2) as f:
+#         dset = f['DutChannel_1_Acquisition_0/trace']
         
-        if kwargs['demod_type'] == "full":
-            signal = dset[()] # 读取全部
-            window = signal.size
-        elif kwargs['demod_type'] == "partial":
-            signal = dset[i_start:i_end] # 利用HDF5切片直读，不读入无关数据
-        else:
-            raise ValueError("Invalid demod type")
+#         if kwargs['demod_type'] == "full":
+#             signal = dset[()] # 读取全部
+#             window = signal.size
+#         elif kwargs['demod_type'] == "partial":
+#             signal = dset[i_start:i_end] # 利用HDF5切片直读，不读入无关数据
+#         else:
+#             raise ValueError("Invalid demod type")
 
-    return demodulate(signal, kwargs['demod_freq'], window, st, kwargs['demod_phase'], kwargs['window_type'])
+#     return demodulate(signal, kwargs['demod_freq'], window, st, kwargs['demod_phase'], kwargs['window_type'])
 
 # def calu_data(file, params):
 #     with parallel_backend('loky', inner_max_num_threads=1):
@@ -138,27 +138,114 @@ def readfile(file, **kwargs):
 #     demod2_data = np.stack( [d[1] for d in demod_list],axis=0 )
 #     return time,demod2_data
 
-def calu_data(files, params):
-    # 1. 先处理第一个文件，获取时间轴和数据形状
-    time, first_data = readfile(files[0], **params)
+# def calu_data(files, params):
+#     # 1. 先处理第一个文件，获取时间轴和数据形状
+#     time, first_data = readfile(files[0], **params)
     
-    # 2. 预分配结果大数组，避免 np.stack 的巨大内存开销和拷贝时间
+#     # 2. 预分配结果大数组，避免 np.stack 的巨大内存开销和拷贝时间
+#     n_files = len(files)
+#     results = np.empty((n_files, *first_data.shape), dtype=first_data.dtype)
+#     results[0] = first_data # 填入第一个数据
+
+#     # 定义写入函数，利用闭包直接写入共享内存 results
+#     def fill_data(i):
+#         _, data = readfile(files[i], **params)
+#         results[i] = data # 线程直接写内存，无序列化开销
+
+#     # 3. 使用多线程并行 (prefer='threads')
+#     # HDF5 I/O 和 NumPy 计算释放 GIL，线程效率极高且无数据传输成本
+#     Parallel(n_jobs=-1, require='sharedmem')(
+#         delayed(fill_data)(i) for i in range(1, n_files)
+#     )
+
+#     return time, results
+
+
+
+# 核心解调逻辑：纯数学运算，无多余对象
+def core_process(signal, freq, window, t0, phase, window_type):
+    n = len(signal)
+    f_samp = 4.8e9
+    
+    # 1. 混频 (Mixing)
+    # 利用广播机制和复数旋转，避免生成巨大的时间数组 t
+    # 相对时间 t_rel 用于生成旋转因子
+    t_rel = np.arange(n) / f_samp
+    # 初始相位包含 t0 和 phase，一次性算好
+    phase_init = np.exp(1j * (2 * np.pi * freq * t0 + phase))
+    inter = signal * np.exp(1j * 2 * np.pi * freq * t_rel) * phase_init
+
+    # 2. 滤波 (Filtering)
+    if window_type == "uniform":
+        # 利用 cumsum 实现 O(N) 复杂度的 Boxcar 滤波
+        cs = np.cumsum(inter)
+        # 向量化切片相减，避免 insert/loop
+        res = (cs[window-1:] - np.concatenate(([0], cs[:-window]))) / window
+        # 注意：上面的写法是为了处理边界，比 insert 快且省内存
+        # 第一点单独修正：cs[window-1] - 0
+        res[0] = cs[window-1] / window 
+        return res
+        
+    elif window_type == "gaussian":
+        # 预计算高斯核 (假设 window 大小固定，这里每次算也很快，瓶颈在卷积)
+        # 如果 window 很大，fftconvolve (O(N logN)) 比 convolve (O(N*W)) 快几十倍
+        kernel = np.exp(-0.5 * np.linspace(-1.5, 1.5, window) ** 2)
+        kernel /= kernel.sum()
+        return fftconvolve(inter, kernel, mode="valid")
+
+def calu_data(files, params):
+    # 1. 参数预处理 (避免在循环中重复查字典)
+    sr = params.get('sample_rate', 4.8e9)
+    freq = params['demod_freq']
+    phase = params['demod_phase']
+    w_type = params['window_type']
+    d_type = params['demod_type']
+    st_time = params.get('st', 0)
+    
+    # 提前计算切片索引
+    if d_type == "partial":
+        i_st, i_ed = int(st_time * sr), int(params['ed'] * sr)
+        win_len = int(sr * params['demod_len'])
+    else:
+        win_len = None # Full 模式下需读取文件后确定
+
+    # 2. 预读取第一个文件以分配内存 (Memory Pre-allocation)
+    # 这是防止内存碎片的关键
+    with h5py.File(files[0], 'r') as f:
+        dset = f['DutChannel_1_Acquisition_0/trace']
+        if d_type == "partial":
+            sig_0 = dset[i_st:i_ed]
+        else:
+            sig_0 = dset[()]
+            win_len = sig_0.size # Full模式下更新 window
+    
+    # 计算输出的时间轴 (只需计算一次)
+    t_total = np.arange(len(sig_0)) / sr + st_time
+    t_out = t_total[win_len-1:]
+    
+    # 预分配结果大数组 (Shared Memory)
     n_files = len(files)
-    results = np.empty((n_files, *first_data.shape), dtype=first_data.dtype)
-    results[0] = first_data # 填入第一个数据
+    res_len = len(sig_0) - win_len + 1
+    results = np.empty((n_files, res_len), dtype=np.complex128)
 
-    # 定义写入函数，利用闭包直接写入共享内存 results
-    def fill_data(i):
-        _, data = readfile(files[i], **params)
-        results[i] = data # 线程直接写内存，无序列化开销
+    # 3. 定义工作函数 (闭包)
+    # 直接写入 results，无返回值，无序列化开销
+    def worker(i, file_path):
+        with h5py.File(file_path, 'r', libver='latest', rdcc_nbytes=4*1024**2) as f:
+            dset = f['DutChannel_1_Acquisition_0/trace']
+            # 只读硬盘上需要的那一段
+            raw = dset[i_st:i_ed] if d_type == "partial" else dset[()]
+            
+        # 计算并直接写入共享内存
+        results[i] = core_process(raw, freq, win_len, st_time, phase, w_type)
 
-    # 3. 使用多线程并行 (prefer='threads')
-    # HDF5 I/O 和 NumPy 计算释放 GIL，线程效率极高且无数据传输成本
-    Parallel(n_jobs=-1, require='sharedmem')(
-        delayed(fill_data)(i) for i in range(1, n_files)
+    # 4. 多线程并行执行
+    # require='sharedmem' 确保线程共享 results 数组
+    Parallel(n_jobs=-1, require='sharedmem', prefer='threads')(
+        delayed(worker)(i, f) for i, f in enumerate(files)
     )
 
-    return time, results
+    return t_out, results
 
 
 def get_data(params):
