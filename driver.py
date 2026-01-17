@@ -172,7 +172,7 @@ def set_dc_voltage(target_voltage,address= 'USB0::0x0B21::0x0039::90YC41697::0::
     print(f"Final current set to {target_voltage} A")
     
     dc.close()
-    rm.close()
+    # rm.close()
 
 
 def ramp_X_new(B0, Mag, rate=0.0002, xi=0, phi=0, psi=0, step=0, Max_B=[0.5,0.5,0.1], heating_time = 30, epsilon=1e-6):

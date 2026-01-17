@@ -83,6 +83,94 @@ def c_shape_waveform(tau, bw, base_shape='sech', beta=10, N=20):
     signal = amplitude * np.exp(1j * phase)
     return times, signal
 
+import numpy as np
+
+def bir4_envelope_from_sim(
+    tau,
+    dw0,
+    beta,
+    kappa,
+    theta=np.pi,
+    sample_rate=4.8e9,
+    normalize=True,
+    omega_end_zero=False,
+):
+    """
+    BIR-4 complex envelope that matches your simulation branch: type == 'bir4_user'
+      - AM: piecewise tanh
+      - phase step on middle half: exp(1j * dphi), dphi = pi + theta/2
+      - FM: piecewise tanh -> omega(t)
+      - total phase = angle(a) + cumsum(omega)*dt
+      - output complex envelope s(t) = a(t) * exp(1j * cumsum(omega)*dt)
+
+    Parameters
+    ----------
+    tau : float [s]
+    dw0 : float [rad/s]      (same as sim)
+    beta : float             (AM tanh slope)
+    kappa: float             (FM tanh slope)
+    theta: float [rad]       flip angle (pi for inversion)
+    sample_rate : float [Hz] (AWG SR)
+    normalize : bool         normalize max |s| to 1
+    omega_end_zero : bool    if True, force omega[-1]=0 (sim bir4_user used False)
+
+    Returns
+    -------
+    times : np.ndarray [s]
+    env   : np.ndarray complex, same length as times
+    """
+    sr = float(sample_rate)
+    n = int(np.round(tau * sr))
+    if n < 8:
+        raise ValueError("tau too short or sample_rate too low: not enough samples.")
+
+    # Use endpoint=False so dt == 1/sample_rate and exactly matches AWG sampling
+    times = np.arange(n, dtype=np.float64) / sr
+    dt = 1.0 / sr
+    t = times / tau  # normalized time in [0, 1)
+
+    # Segment masks (same boundaries as sim)
+    m1 = t < 0.25
+    m2 = (t >= 0.25) & (t < 0.5)
+    m3 = (t >= 0.5) & (t < 0.75)
+    m4 = t >= 0.75
+
+    # AM: piecewise tanh (same formulas as sim)
+    amp = np.zeros(n, dtype=np.float64)
+    amp[m1] = np.tanh(beta * (1 - 4 * t[m1]))
+    amp[m2] = np.tanh(beta * (4 * t[m2] - 1))
+    amp[m3] = np.tanh(beta * (3 - 4 * t[m3]))
+    amp[m4] = np.tanh(beta * (4 * t[m4] - 3))
+
+    # Complex a(t) with middle-half phase step (same as sim)
+    dphi = np.pi + theta / 2.0
+    a = amp.astype(np.complex64)
+    a[m2 | m3] *= np.exp(1j * dphi).astype(np.complex64)
+
+    # FM omega(t): piecewise tanh (same as sim bir4_user)
+    omega = np.zeros(n, dtype=np.float64)
+    omega[m1] = dw0 * np.tanh(kappa * (4 * t[m1]))
+    omega[m2] = dw0 * np.tanh(kappa * (4 * t[m2] - 2))
+    omega[m3] = dw0 * np.tanh(kappa * (4 * t[m3] - 2))
+    omega[m4] = dw0 * np.tanh(kappa * (4 * t[m4] - 4))
+
+    if omega_end_zero:
+        omega[-1] = 0.0
+
+    # Integrate omega to get extra FM phase (same discrete rule as sim: cumsum * dt)
+    phi_fm = np.cumsum(omega) * dt
+
+    # Total complex envelope: a(t) * exp(i * phi_fm)
+    env = a * np.exp(1j * phi_fm).astype(np.complex64)
+
+    if normalize:
+        mx = np.max(np.abs(env))
+        if mx > 1e-12:
+            env = env / mx
+
+    return times, env
+
+
 def wurst_waveform(tau, bw, N, phase_skew):
     """
     WURST adiabatic pulse.
@@ -266,8 +354,108 @@ def add_pulses_to_program(program, pulse_params_list):
             # Expands to 4 pulses: Pi(x), Pi(phi), 2Pi(3phi), Pi(phi)
             dur, amp, freq, ph, ch, pre_del = params[2:8]
             
+<<<<<<< Updated upstream
             # BB1 Phase: arccos(-1/4) approx 104.5 deg
             phi_bb1 = np.arccos(-0.25)
+=======
+            # elif params[1] == "bir4":
+            #     envelope_type = params[1]
+            #     duration      = params[2]
+            #     amplitude     = params[3]
+            #     frequency     = params[4]
+            #     phase         = params[5]
+            #     awg_channel   = params[6]
+            #     pre_delay     = params[7]
+            #     df_hz         = params[8]     # 半扫频宽（Hz）
+            #     beta          = params[9]
+            #     n_sech        = params[10]
+            #     # 两次相位跳变，缺省为 π 旋转设置
+            #     dphi1 = params[11] if len(params) > 11 else 1.5*np.pi
+            #     dphi2 = params[12] if len(params) > 12 else -0.5*np.pi
+
+            #     time, envelope = zip(bir4_waveform(duration, df_hz, beta, n_sech, dphi1, dphi2))
+            #     bir4_env = qcs.ArbitraryEnvelope(time[0], envelope[0])
+            #     pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
+            #                         amplitude=amplitude, rf_frequency=frequency,
+            #                         instantaneous_phase=phase)
+            #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+            # elif params[1] == "bir4":
+            #     # Expected params list structure:
+            #     # [type, 'bir4', duration, amplitude, frequency, phase, awg, delay, 
+            #     #  dw0, beta, kappa, theta]
+                
+            #     envelope_type = params[1]
+            #     duration      = params[2]
+            #     amplitude     = params[3]
+            #     frequency     = params[4]
+            #     phase         = params[5]
+            #     awg_channel   = params[6]
+            #     pre_delay     = params[7]
+                
+            #     # Custom BIR4 params
+            #     # dw0: FM scaling (rad/s), matches params['dw0'] in simulation
+            #     dw0   = params[8]  
+            #     beta  = params[9]
+            #     kappa = params[10]
+            #     # Theta (flip angle), default to pi if not provided
+            #     theta = params[11] if len(params) > 11 else np.pi
+
+            #     # Generate Waveform
+            #     # Note: bir4_waveform returns [times, signal]
+            #     time_arr, signal_arr = bir4_waveform(duration, dw0, beta, kappa, theta)
+                
+            #     # Create QCS Envelope
+            #     bir4_env = qcs.ArbitraryEnvelope(time_arr, signal_arr)
+                
+            #     # Create Pulse
+            #     # amplitude param scales the normalized signal
+            #     pulse = qcs.RFWaveform(duration=duration, envelope=bir4_env,
+            #                         amplitude=amplitude, rf_frequency=frequency,
+            #                         instantaneous_phase=phase)
+                                    
+            #     program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+            elif params[1] == "bir4":
+                # Params:
+                # ['waveform','bir4', duration, amplitude, frequency, phase, awg_channel, pre_delay,
+                #   dw0(rad/s), beta, kappa, theta(optional), omega_end_zero(optional)]
+                duration     = params[2]
+                amplitude    = params[3]
+                frequency    = params[4]
+                phase        = params[5]
+                awg_channel  = params[6]
+                pre_delay    = params[7]
+
+                dw0          = params[8]   # rad/s (same as sim)
+                beta         = params[9]
+                kappa        = params[10]
+                theta        = params[11] if len(params) > 11 else np.pi
+                omega_end_zero = params[12] if len(params) > 12 else False
+
+                time_arr, env_arr = bir4_envelope_from_sim(
+                    tau=duration,
+                    dw0=dw0,
+                    beta=beta,
+                    kappa=kappa,
+                    theta=theta,
+                    sample_rate=4.8e9,
+                    normalize=True,          # keep max |env| = 1, use amplitude=amplitude to scale
+                    omega_end_zero=omega_end_zero
+                )
+
+                bir4_env = qcs.ArbitraryEnvelope(time_arr, env_arr)
+                pulse = qcs.RFWaveform(
+                    duration=duration,
+                    envelope=bir4_env,
+                    amplitude=amplitude,
+                    rf_frequency=frequency,
+                    instantaneous_phase=phase
+                )
+                program.add_waveform(pulse, awg_channel, pre_delay=pre_delay)
+
+
+            else:
+                print("Pulse shape is unknown.")
+>>>>>>> Stashed changes
             
             # Sequence definitions (Duration relative to pi-pulse)
             seq = [
